@@ -1,0 +1,6 @@
+@AEDIII_HostAddress = http://localhost:5004
+
+GET {{AEDIII_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
