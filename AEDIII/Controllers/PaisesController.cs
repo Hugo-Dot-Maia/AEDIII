@@ -1,5 +1,5 @@
 ﻿using AEDIII.Entidades;
-using AEDIII.Repositorio;
+using AEDIII.Interfaces;
 using Microsoft.AspNetCore.Mvc;
 
 namespace AEDIII.Controllers
@@ -8,36 +8,36 @@ namespace AEDIII.Controllers
     [Route("[controller]")]
     public class PaisesController : ControllerBase
     {
-        private readonly Arquivo<Pais> _arquivo;
+        private readonly IPaisService _paisService;
 
-        public PaisesController(Arquivo<Pais> arquivo)
+        public PaisesController(IPaisService paisService)
         {
-            _arquivo = arquivo;
+            _paisService = paisService;
         }
 
         [HttpPost]
         public IActionResult CriarPais([FromBody] Pais pais)
         {
-            int id = _arquivo.Create(pais);
+            int id = _paisService.CriarPais(pais);
             return CreatedAtAction(nameof(ObterPais), new { id }, pais);
         }
 
         [HttpGet("{id}")]
         public IActionResult ObterPais(int id)
         {
-            var pais = _arquivo.Read(id);
-            if (pais == null) return NotFound();
+            var pais = _paisService.ObterPais(id);
+            if (pais == null)
+                return NotFound();
             return Ok(pais);
         }
 
         [HttpDelete("{id}")]
         public IActionResult DeletarPais(int id)
         {
-            bool deletado = _arquivo.Delete(id);
-            if (!deletado) return NotFound();
+            bool deletado = _paisService.DeletarPais(id);
+            if (!deletado)
+                return NotFound();
             return NoContent();
         }
-
-
     }
 }
