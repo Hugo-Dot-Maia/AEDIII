@@ -26,7 +26,7 @@ namespace AEDIII.Controllers
                 Populacao = criarPaisDto.Populacao,
                 Densidade = criarPaisDto.Densidade,
                 Tamanho = criarPaisDto.Tamanho,
-                UltimaAtualizacao = criarPaisDto.UltimaAtualizacao,
+                UltimaAtualizacao = DateTime.UtcNow,
             };
 
 
@@ -50,6 +50,28 @@ namespace AEDIII.Controllers
             if (!deletado)
                 return NotFound();
             return NoContent();
+        }
+
+        [HttpPut("{id}")]
+        public IActionResult AtualizarPais(int id, [FromBody] AtualizarPaisDto paisDto)
+        {
+            var paisExistente = _paisService.ObterPais(id);
+            if (paisExistente == null)
+                return NotFound();
+
+            
+            paisExistente.Nome = paisDto.Nome;
+            paisExistente.Densidade = paisDto.Densidade;
+            paisExistente.Populacao = paisDto.Populacao;
+            paisExistente.Tamanho = paisDto.Tamanho;
+            paisExistente.Rank = paisDto.Rank;
+            paisExistente.UltimaAtualizacao = DateTime.UtcNow;
+
+            bool atualizado = _paisService.AtualizarPais(paisExistente);
+            if (atualizado)
+                return NoContent();
+
+            return BadRequest("Erro ao atualizar o país");
         }
     }
 }

@@ -27,6 +27,11 @@ namespace AEDIII.Service
             return _arquivo.Delete(id);
         }
 
+        public bool AtualizarPais(Pais pais)
+        {
+            return _arquivo.Update(pais);
+        }
+
 
     }
 }

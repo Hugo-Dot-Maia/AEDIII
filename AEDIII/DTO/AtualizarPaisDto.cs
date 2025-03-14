@@ -1,6 +1,6 @@
 ﻿namespace AEDIII.DTO
 {
-    public class CriarPaisDto
+    public class AtualizarPaisDto
     {
         public int Rank { get; set; }
         public string Nome { get; set; }
