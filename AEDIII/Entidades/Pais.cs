@@ -12,6 +12,7 @@ namespace AEDIII.Entidades
         public float Tamanho { get; set; }
         public DateTime UltimaAtualizacao { get; set; }
         public List<string> CidadesPopulosas { get; set; } = new List<string>();
+        public int QuantidadeCidades => CidadesPopulosas?.Count ?? 0;
 
         public void SetId(int id) => Id = id;
         public int GetId() => Id;

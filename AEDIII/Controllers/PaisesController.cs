@@ -95,7 +95,7 @@ namespace AEDIII.Controllers
                 .Select(id => id.Value)
                 .ToList();
 
-            if (!idList.Any())
+            if (idList.Count == 0)
                 return BadRequest("Nenhum id válido foi informado.");
 
             List<Pais> paises = _paisService.ObterPaises(idList);
