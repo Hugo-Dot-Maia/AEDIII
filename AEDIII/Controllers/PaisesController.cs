@@ -16,7 +16,7 @@ namespace AEDIII.Controllers
             _paisService = paisService;
         }
 
-        [HttpPost]
+        [HttpPost("CriarPais")]
         public IActionResult CriarPais([FromBody] CriarPaisDto criarPaisDto)
         {
             Pais pais = new()
@@ -81,6 +81,26 @@ namespace AEDIII.Controllers
         {
             bool resultado = _paisService.ImportarPaises();
             return NoContent();
+        }
+
+        [HttpGet("lista")]
+        public IActionResult ObterPaisesPorIds([FromQuery] string ids)
+        {
+            if (string.IsNullOrEmpty(ids))
+                return BadRequest("O parâmetro 'ids' é obrigatório.");
+
+            var idList = ids.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(idStr => int.TryParse(idStr, out int id) ? id : (int?)null)
+                .Where(id => id.HasValue)
+                .Select(id => id.Value)
+                .ToList();
+
+            if (!idList.Any())
+                return BadRequest("Nenhum id válido foi informado.");
+
+            List<Pais> paises = _paisService.ObterPaises(idList);
+
+            return Ok(paises);
         }
     }
 }

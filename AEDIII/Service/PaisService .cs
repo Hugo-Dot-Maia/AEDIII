@@ -86,5 +86,18 @@ namespace AEDIII.Service
 
             return true;
         }
+
+        public List<Pais> ObterPaises(List<int> ids)
+        {
+            List<Pais> paises = new List<Pais>();
+
+            foreach (var id in ids)
+            {
+                var pais = _arquivo.Read(id);
+                if (pais != null)
+                    paises.Add(pais);
+            }
+            return paises;
+        }
     }
 }
