@@ -27,6 +27,7 @@ namespace AEDIII.Controllers
                 Densidade = criarPaisDto.Densidade,
                 Tamanho = criarPaisDto.Tamanho,
                 UltimaAtualizacao = DateTime.UtcNow,
+                CidadesPopulosas = criarPaisDto.CidadesPopulosas
             };
 
             int id = _paisService.CriarPais(pais);
@@ -65,8 +66,10 @@ namespace AEDIII.Controllers
             paisExistente.Tamanho = paisDto.Tamanho;
             paisExistente.Rank = paisDto.Rank;
             paisExistente.UltimaAtualizacao = DateTime.UtcNow;
+            paisExistente.CidadesPopulosas = paisDto.CidadesPopulosas;
 
             bool atualizado = _paisService.AtualizarPais(paisExistente);
+
             if (atualizado)
                 return NoContent();
 
