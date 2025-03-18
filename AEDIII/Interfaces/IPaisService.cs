@@ -8,5 +8,6 @@ namespace AEDIII.Interfaces
         Pais ObterPais(int id);
         bool DeletarPais(int id);
         bool AtualizarPais(Pais pais);
+        bool ImportarPaises();
     }
 }

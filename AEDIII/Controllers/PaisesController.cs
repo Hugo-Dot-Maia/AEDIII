@@ -29,7 +29,6 @@ namespace AEDIII.Controllers
                 UltimaAtualizacao = DateTime.UtcNow,
             };
 
-
             int id = _paisService.CriarPais(pais);
             return CreatedAtAction(nameof(ObterPais), new { id }, pais);
         }
@@ -55,10 +54,10 @@ namespace AEDIII.Controllers
         [HttpPut("{id}")]
         public IActionResult AtualizarPais(int id, [FromBody] AtualizarPaisDto paisDto)
         {
-            var paisExistente = _paisService.ObterPais(id);
+            Pais paisExistente = _paisService.ObterPais(id);
+
             if (paisExistente == null)
                 return NotFound();
-
             
             paisExistente.Nome = paisDto.Nome;
             paisExistente.Densidade = paisDto.Densidade;
@@ -72,6 +71,13 @@ namespace AEDIII.Controllers
                 return NoContent();
 
             return BadRequest("Erro ao atualizar o país");
+        }
+
+        [HttpPost("import")]
+        public IActionResult ImportarPaises()
+        {
+            bool resultado = _paisService.ImportarPaises();
+            return NoContent();
         }
     }
 }
