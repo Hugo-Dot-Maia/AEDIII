@@ -8,9 +8,9 @@ Este projeto é uma API desenvolvida com ASP.NET Core que gerencia registros de 
   * Atualizar país (PUT)
   * Deletar país (DELETE)
 * Índice B+:
- * Índice no arquivo .idx paralelo ao .db para buscas O(logₘ N).
- * Tratamento de splits, merges e underflow em folhas.
- * Rejeita chaves duplicadas (ID único).
+  * Índice no arquivo .idx paralelo ao .db para buscas O(logₘ N).
+  * Tratamento de splits, merges e underflow em folhas.
+  * Rejeita chaves duplicadas (ID único).
     
 * Importação de Dados:
   * Importar os primeiros 50 registros do arquivo CSV (WolrdPopulationData.csv) para o repositório.
