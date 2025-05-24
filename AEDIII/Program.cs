@@ -1,3 +1,4 @@
+using AEDIII.Compactacao;
 using AEDIII.Entidades;
 using AEDIII.Interfaces;
 using AEDIII.Repositorio;
@@ -14,6 +15,10 @@ builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+builder.Services.AddSingleton<HuffmanCompressor>();
+builder.Services.AddSingleton<LzwCompressor>();
+builder.Services.AddSingleton<CompactacaoService>();
 
 var app = builder.Build();
 
