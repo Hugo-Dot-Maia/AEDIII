@@ -51,7 +51,7 @@ namespace AEDIII.Service
                 // Lê todas as linhas e ignora a primeira linha (cabeçalho)
                 var linhas = System.IO.File.ReadLines(csvFilePath)
                                            .Skip(1)  // Pula o cabeçalho
-                                           .Take(50); // Pega as primeiras 50 linhas
+                                           .Take(200); // Pega as primeiras 200 linhas
 
                 foreach (var linha in linhas)
                 {

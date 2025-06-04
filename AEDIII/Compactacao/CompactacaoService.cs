@@ -52,7 +52,6 @@ namespace AEDIII.Compactacao
             string lzwPath = Path.ChangeExtension(dbPath, $"LZW{version}.db");
             string outH = Path.ChangeExtension(dbPath, $"Huffman{version}_dec.db");
             string outL = Path.ChangeExtension(dbPath, $"LZW{version}_dec.db");
-            // Execução e medição similar à compressão
         }
     }
 
