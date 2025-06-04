@@ -5,24 +5,33 @@ using System.IO;
 namespace AEDIII.Indexes
 {
     /// <summary>
-    /// B+ Tree index on int keys (Id) mapping to data file offsets.
-    /// Order m = 4 => max children = 4, max keys = 3.
-    /// Implements insertion, search, and deletion with underflow merge.
+    /// Índice B+ para chaves inteiras (ID) mapeando para offsets no arquivo de dados.
+    /// Ordem m = 4 => cada nó interno pode ter até 4 ponteiros a filhos e até 3 chaves.
+    /// Suporta operações de busca, inserção (com split) e exclusão de chaves em folhas com fusão.
     /// </summary>
     public class BPlusTreeIndex
     {
-        private const int Order = 4;
-        private const int MaxKeys = Order - 1; // 3 keys per node
-        private const int MinKeys = 2; // ceil((4-1)/2)=2
+        private const int Order = 4;                 // Ordem da árvore: número máximo de filhos
+        private const int MaxKeys = Order - 1;       // Número máximo de chaves em um nó (3)
+        private const int MinKeys = 2;               // Número mínimo de chaves em um nó (ceil((m-1)/2))
 
+        // Streams para leitura/escrita do arquivo de índice (.idx)
         private FileStream file;
         private BinaryReader reader;
         private BinaryWriter writer;
 
-        private long rootOffset;
-        private long nextFreeOffset;
+        // Offsets no arquivo .idx
+        private long rootOffset;       // Posição da raiz da árvore no arquivo
+        private long nextFreeOffset;   // Próximo offset livre para alocar novo nó
         private readonly string indexPath;
 
+        // Tamanho fixo do cabeçalho: 8 bytes (long) para rootOffset + 8 bytes para nextFreeOffset
+        private const int HeaderSize = sizeof(long) + sizeof(long);
+
+        /// <summary>
+        /// Construtor: abre ou cria o arquivo de índice. Se for novo, inicializa cabeçalho.
+        /// </summary>
+        /// <param name="indexName">Nome base para o arquivo .idx</param>
         public BPlusTreeIndex(string indexName)
         {
             indexPath = Path.Combine("./dados/", indexName + ".idx");
@@ -49,61 +58,80 @@ namespace AEDIII.Indexes
             }
         }
 
-        private const int HeaderSize = sizeof(long) + sizeof(long);
-
         /// <summary>
-        /// Search by key, returns data offset or -1 if not found
+        /// Busca um offset de dados pela chave. Retorna -1 se não encontrada.
+        /// Percorre a árvore da raiz até a folha.
         /// </summary>
         public long Search(int key)
         {
+            // Se raíz = -1 => árvore vazia
             if (rootOffset < 0) return -1;
             long current = rootOffset;
+
+            // Percorre até encontrar nó folha
             while (true)
             {
                 Node node = ReadNode(current);
+
                 if (node.IsLeaf)
                 {
+                    // Se for folha, varre todas as chaves na folha em busca da key
                     for (int i = 0; i < node.NumKeys; i++)
+                    {
                         if (node.Keys[i] == key)
-                            return node.Children[i];
-                    return -1;
+                            return node.Children[i]; // Retorna offset do registro
+                    }
+                    return -1; // Não encontrou na folha
                 }
+
+                // Caso nó interno, determina qual filho seguir: encontra primeiro índice i onde key < Keys[i]
                 int idx = 0;
                 while (idx < node.NumKeys && key >= node.Keys[idx]) idx++;
+                // Atualiza current para o offset do filho apropriado
                 current = node.Children[idx];
             }
         }
 
         /// <summary>
-        /// Insert key->dataOffset
+        /// Insere uma nova chave (key) com seu offset de dados (dataOffset).
+        /// Rejeita duplicatas, faz split de nós quando necessário, e pode promover um novo root.
         /// </summary>
         public void Insert(int key, long dataOffset)
         {
-            // Reject duplicate keys
+            // Rejeita chaves duplicadas: se já existe, lança exceção
             if (Search(key) >= 0)
                 throw new InvalidOperationException($"Chave {key} já existe no índice.");
 
-
+            // Se árvore vazia, cria uma única folha como raiz
             if (rootOffset < 0)
             {
                 Node leaf = new Node { IsLeaf = true, NumKeys = 1 };
                 leaf.Keys[0] = key;
-                leaf.Children[0] = dataOffset;
-                leaf.NextLeaf = -1;
+                leaf.Children[0] = dataOffset; // Em folhas, Children armazena offsets de dados
+                leaf.NextLeaf = -1;           // Ponteiro para próxima folha (não há outra)
+
+                // Aloca espaço para esse nó e grava no arquivo
                 rootOffset = AllocateNode();
                 WriteNode(rootOffset, leaf);
                 UpdateHeader();
                 return;
             }
-            var split = InsertRecursive(rootOffset, key, dataOffset);
+
+            // Caso não vazio, insere recursivamente, podendo retornar SplitResult se precisar dividir
+            SplitResult split = InsertRecursive(rootOffset, key, dataOffset);
+
+            // Se houve split na raiz, cria novo nó raiz interno
             if (split != null)
             {
                 Node newRoot = new Node { IsLeaf = false, NumKeys = 1 };
                 newRoot.Keys[0] = split.PromotedKey;
                 newRoot.Children[0] = rootOffset;
                 newRoot.Children[1] = split.NewNodeOffset;
+
                 long newRootOff = AllocateNode();
                 WriteNode(newRootOff, newRoot);
+
+                // Atualiza o rootOffset e grava no cabeçalho
                 rootOffset = newRootOff;
                 UpdateHeader();
             }
@@ -188,36 +216,40 @@ namespace AEDIII.Indexes
         }
 
         /// <summary>
-        /// Delete a key from the index, merging underflowed leaf into sibling.
+        /// Exclui uma chave do índice. Se ocorrer underflow em folha, faz fusão com irmão.
         /// </summary>
         public bool Delete(int key)
         {
+            // 1) Se árvore vazia, nada a remover
             if (rootOffset < 0) return false;
 
-            // stack for path
+            // 2) Pilha para armazenar o caminho (offset, nó, índice no pai)
             var path = new List<(long offset, Node node, int idx)>();
             long current = rootOffset;
-            Node node;
-            int childIdx;
-            // traverse to leaf
+
+            // 3) Percorre até a folha para encontrar a chave
             while (true)
             {
-                node = ReadNode(current);
+                Node node = ReadNode(current);
                 if (node.IsLeaf)
                 {
-                    path.Add((current, node, -1));
+                    path.Add((current, node, -1)); // -1 indica que não há índice no pai para folha
                     break;
                 }
-                childIdx = 0;
+                int childIdx = 0;
                 while (childIdx < node.NumKeys && key >= node.Keys[childIdx]) childIdx++;
                 path.Add((current, node, childIdx));
                 current = node.Children[childIdx];
             }
-            // remove key in leaf
+
+            // 4) No nó folha, tenta remover a chave
             var (leafOff, leafNode, _) = path[path.Count - 1];
             int i;
-            for (i = 0; i < leafNode.NumKeys; i++) if (leafNode.Keys[i] == key) break;
-            if (i == leafNode.NumKeys) return false; // not found
+            for (i = 0; i < leafNode.NumKeys; i++)
+                if (leafNode.Keys[i] == key) break;
+            if (i == leafNode.NumKeys) return false; // não encontrou
+
+            // 5) Desloca as chaves/ponteiros seguintes para “cobrir” o espaço
             for (int j = i; j < leafNode.NumKeys - 1; j++)
             {
                 leafNode.Keys[j] = leafNode.Keys[j + 1];
@@ -225,47 +257,52 @@ namespace AEDIII.Indexes
             }
             leafNode.NumKeys--;
             WriteNode(leafOff, leafNode);
-            // underflow?
+
+            // 6) Se não ocorreu underflow (NumKeys >= MinKeys) ou se é a única folha (raiz), fim
             if (leafNode.NumKeys >= MinKeys || path.Count == 1)
-            {
-                // done or root leaf
                 return true;
-            }
-            // merge leaf with sibling
+
+            // 7) Em caso de underflow, faz fusão da folha com um irmão adjacente
             var (parentOff, parentNode, idxInParent) = path[path.Count - 2];
-            // prefer left sibling
+
+            // 7.1) Determina irmão: prefere irmão à esquerda, se existir
             long siblingOff;
             Node sibling;
             bool isLeft = false;
             if (idxInParent > 0)
             {
-                // left sibling
+                // irmão à esquerda
                 siblingOff = parentNode.Children[idxInParent - 1];
                 sibling = ReadNode(siblingOff);
                 isLeft = true;
             }
             else
             {
-                // right sibling
+                // irmão à direita
                 siblingOff = parentNode.Children[idxInParent + 1];
                 sibling = ReadNode(siblingOff);
             }
-            // merge leaf into sibling
-            Node dest = isLeft ? sibling : leafNode;
-            Node src = isLeft ? leafNode : sibling;
-            int destOldKeys = dest.NumKeys;
-            // append src keys
+
+            // 7.2) Função de fusão: une chaves/ponteiros de leafNode e sibling
+            Node dest = isLeft ? sibling : leafNode; // nó que receberá todas as chaves
+            Node src = isLeft ? leafNode : sibling;  // nó que será “esvaziado"
+            int destKeys = dest.NumKeys;
+
             for (int k = 0; k < src.NumKeys; k++)
             {
-                dest.Keys[destOldKeys + k] = src.Keys[k];
-                dest.Children[destOldKeys + k] = src.Children[k];
+                dest.Keys[destKeys + k] = src.Keys[k];
+                dest.Children[destKeys + k] = src.Children[k];
             }
             dest.NumKeys += src.NumKeys;
+
+            // Ajusta ponteiro NextLeaf para manter encadeamento
             dest.NextLeaf = isLeft ? sibling.NextLeaf : leafNode.NextLeaf;
-            // write dest
+
+            // Grava o nó destino já mesclado
             long destOff = isLeft ? siblingOff : leafOff;
             WriteNode(destOff, dest);
-            // remove pointer and key from parent
+
+            // 7.3) Remove a chave correspondente do nó pai e desloca filhos subsequentes
             int removeIdx = isLeft ? idxInParent : idxInParent + 1;
             for (int k = removeIdx - (isLeft ? 0 : 1); k < parentNode.NumKeys - 1; k++)
             {
@@ -274,13 +311,14 @@ namespace AEDIII.Indexes
             }
             parentNode.NumKeys--;
             WriteNode(parentOff, parentNode);
-            // adjust root if empty
+
+            // 7.4) Se o nó pai se tornar vazio e for raiz, promove único filho
             if (parentOff == rootOffset && parentNode.NumKeys == 0)
             {
-                // new root is first child
                 rootOffset = parentNode.Children[0];
                 UpdateHeader();
             }
+
             return true;
         }
 
