@@ -33,7 +33,12 @@ namespace AEDIII.Repositorio
             this.nomeArquivo = $"./dados/{nomeArquivo}/{nomeArquivo}.db";
 
             // Abre ou cria o arquivo de dados
-            arquivo = new FileStream(this.nomeArquivo, FileMode.OpenOrCreate, FileAccess.ReadWrite);
+            arquivo = new FileStream(
+                this.nomeArquivo,
+                FileMode.OpenOrCreate,
+                FileAccess.ReadWrite,
+                FileShare.ReadWrite
+            );
             leitor = new BinaryReader(arquivo);
             escritor = new BinaryWriter(arquivo);
 
@@ -50,7 +55,7 @@ namespace AEDIII.Repositorio
             _index = new BPlusTreeIndex(nomeArquivo);
 
             // Reconstrói índice se estiver vazio mas houver registros no .db
-            if (_index.Search(0) < 0 && arquivo.Length > TAM_CABECALHO)
+            if (_index.IsEmpty() && arquivo.Length > TAM_CABECALHO)
                 RebuildIndex();
         }
 

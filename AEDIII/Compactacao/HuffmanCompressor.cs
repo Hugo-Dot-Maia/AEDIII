@@ -17,7 +17,7 @@ namespace AEDIII.Compactacao
         }
         public void Compress(string inputPath, string outputPath)
         {
-            byte[] data = File.ReadAllBytes(inputPath);
+            byte[] data = File.ReadAllBytes(inputPath); 
             var freqMap = new Dictionary<byte, int>();
             foreach (var b in data)
                 freqMap[b] = freqMap.GetValueOrDefault(b) + 1;

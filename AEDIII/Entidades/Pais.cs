@@ -16,8 +16,7 @@ namespace AEDIII.Entidades
 
         public void SetId(int id) => Id = id;
         public int GetId() => Id;
-
-        public byte[] ToByteArray()
+                public byte[] ToByteArray()
         {
             using var ms = new MemoryStream();
             using var bw = new BinaryWriter(ms);

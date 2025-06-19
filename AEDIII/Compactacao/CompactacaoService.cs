@@ -52,6 +52,22 @@ namespace AEDIII.Compactacao
             string lzwPath = Path.ChangeExtension(dbPath, $"LZW{version}.db");
             string outH = Path.ChangeExtension(dbPath, $"Huffman{version}_dec.db");
             string outL = Path.ChangeExtension(dbPath, $"LZW{version}_dec.db");
+
+            // 1) Descompressão Huffman
+            var sw = Stopwatch.StartNew();
+            _huffman.Decompress(huffPath, outH);
+            sw.Stop();
+            Console.WriteLine($"Descompressão Huffman: {sw.ElapsedMilliseconds} ms");
+
+            // 2) Descompressão LZW
+            sw.Restart();
+            _lzw.Decompress(lzwPath, outL);
+            sw.Stop();
+            Console.WriteLine($"Descompressão LZW:     {sw.ElapsedMilliseconds} ms");
+
+            Console.WriteLine($"Arquivos descompactados gerados:");
+            Console.WriteLine($"  - {outH}");
+            Console.WriteLine($"  - {outL}");
         }
     }
 

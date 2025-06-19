@@ -23,6 +23,7 @@ namespace AEDIII.Indexes
         private long nextFreeOffset;
         private readonly string indexPath;
 
+        public bool IsEmpty() => rootOffset < 0;
         public BPlusTreeIndex(string indexName)
         {
             indexPath = Path.Combine("./dados/", indexName + ".idx");

@@ -15,7 +15,7 @@ namespace AEDIII.Controllers
         public IActionResult Compress([FromQuery] int version)
         {
             string dbPath = Path.Combine(Environment.CurrentDirectory, "dados", "Pais", "Pais.db");
-            _svc.RunCompression(dbPath, version);
+            _svc.RunCompression(dbPath, version); 
             return Ok($"Compressão versão {version} concluída.");
         }
 
