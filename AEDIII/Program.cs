@@ -1,6 +1,7 @@
 using AEDIII.Compactacao;
 using AEDIII.Entidades;
 using AEDIII.Interfaces;
+using AEDIII.PatternMatching;
 using AEDIII.Repositorio;
 using AEDIII.Service;
 using Microsoft.OpenApi.Models;
@@ -19,6 +20,7 @@ builder.Services.AddSwaggerGen();
 builder.Services.AddSingleton<HuffmanCompressor>();
 builder.Services.AddSingleton<LzwCompressor>();
 builder.Services.AddSingleton<CompactacaoService>();
+builder.Services.AddSingleton<IPatternMatcher, KmpMatcher>();
 
 var app = builder.Build();
 

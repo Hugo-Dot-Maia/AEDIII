@@ -300,6 +300,28 @@ namespace AEDIII.Repositorio
             return -1;
         }
 
+        public IEnumerable<T> ReadAll()
+        {
+            var lista = new List<T>();
+            // posiciona após o cabeçalho
+            arquivo.Seek(TAM_CABECALHO, SeekOrigin.Begin);
+            while (arquivo.Position < arquivo.Length)
+            {
+                long pos = arquivo.Position;
+                byte lapide = leitor.ReadByte();
+                short tamanho = leitor.ReadInt16();
+                byte[] dados = leitor.ReadBytes(tamanho);
+
+                if (lapide == (byte)' ')
+                {
+                    var obj = new T();
+                    obj.FromByteArray(dados);
+                    lista.Add(obj);
+                }
+            }
+            return lista;
+        }
+
         /// <summary>
         /// Fecha streams de dados e índice, liberando recursos.
         /// </summary>

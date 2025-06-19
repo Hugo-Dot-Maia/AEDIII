@@ -10,5 +10,6 @@ namespace AEDIII.Interfaces
         bool AtualizarPais(Pais pais);
         bool ImportarPaises();
         List<Pais> ObterPaises(List<int> ids);
+        IEnumerable<Pais> SearchByNamePattern(string pattern);
     }
 }

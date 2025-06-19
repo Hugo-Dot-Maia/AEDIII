@@ -1,5 +1,6 @@
 ﻿using AEDIII.Entidades;
 using AEDIII.Interfaces;
+using AEDIII.PatternMatching;
 using AEDIII.Repositorio;
 using Microsoft.Extensions.Hosting;
 
@@ -9,12 +10,17 @@ namespace AEDIII.Service
     {
         private readonly Arquivo<Pais> _arquivo;
         private readonly IHostEnvironment _hostEnvironment;
+        private readonly IPatternMatcher _matcher;
 
-        public PaisService(Arquivo<Pais> arquivo, IHostEnvironment hostEnvironment)
+        public PaisService(Arquivo<Pais> arquivo,
+                   IHostEnvironment hostEnvironment,
+                   IPatternMatcher matcher)
         {
             _arquivo = arquivo;
             _hostEnvironment = hostEnvironment;
+            _matcher = matcher;
         }
+
         public int CriarPais(Pais pais)
         {
             return _arquivo.Create(pais);
@@ -99,5 +105,12 @@ namespace AEDIII.Service
             }
             return paises;
         }
+
+        public IEnumerable<Pais> SearchByNamePattern(string pattern)
+        {
+            var todos = _arquivo.ReadAll();
+            return todos.Where(p => _matcher.Matches(p.Nome, pattern));
+        }
+
     }
 }
