@@ -18,6 +18,7 @@ namespace AEDIII.Repositorio
         private readonly BinaryWriter escritor;
         private readonly BPlusTreeIndex _index;
         private readonly string nomeArquivo;
+        private readonly ICryptoService _crypto;
 
         /// <summary>
         /// Construtor: inicializa diretórios, arquivo de dados e índice B+.
@@ -25,36 +26,27 @@ namespace AEDIII.Repositorio
         /// Reconstrói o índice se houver registros existentes.
         /// </summary>
         /// <param name="nomeArquivo">Nome base para os arquivos .db e .idx.</param>
-        public Arquivo(string nomeArquivo)
+        public Arquivo(string nomeArquivo, ICryptoService cryptoService)
         {
-            // Garante existência dos diretórios de dados
+            _crypto = cryptoService;
+
             Directory.CreateDirectory("./dados");
             Directory.CreateDirectory($"./dados/{nomeArquivo}");
-            this.nomeArquivo = $"./dados/{nomeArquivo}/{nomeArquivo}.db";
+            var path = $"./dados/{nomeArquivo}/{nomeArquivo}.db";
 
-            // Abre ou cria o arquivo de dados
-            arquivo = new FileStream(
-                this.nomeArquivo,
-                FileMode.OpenOrCreate,
-                FileAccess.ReadWrite,
-                FileShare.ReadWrite
-            );
+            arquivo = new FileStream(path, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite);
             leitor = new BinaryReader(arquivo);
             escritor = new BinaryWriter(arquivo);
 
-            // Se arquivo novo ou menor que o cabeçalho, inicializa header
             if (arquivo.Length < TAM_CABECALHO)
             {
                 escritor.Seek(0, SeekOrigin.Begin);
-                escritor.Write(0);       // último ID usado = 0
-                escritor.Write(-1L);     // lista de deletados = vazio
+                escritor.Write(0);       // último ID = 0
+                escritor.Write(-1L);     // freelist vazia
                 escritor.Flush();
             }
 
-            // Inicializa ou carrega índice B+ (arquivo .idx paralelo)
             _index = new BPlusTreeIndex(nomeArquivo);
-
-            // Reconstrói índice se estiver vazio mas houver registros no .db
             if (_index.IsEmpty() && arquivo.Length > TAM_CABECALHO)
                 RebuildIndex();
         }
@@ -71,10 +63,12 @@ namespace AEDIII.Repositorio
                 long pos = arquivo.Position;
                 byte lapide = leitor.ReadByte();           // espaço ou tombstone
                 short tamanho = leitor.ReadInt16();        // tamanho do registro
-                byte[] dados = leitor.ReadBytes(tamanho);
+                //byte[] dados = leitor.ReadBytes(tamanho);
+                var cipher = leitor.ReadBytes(tamanho);
 
                 if (lapide == (byte)' ')
                 {
+                    var dados = _crypto.Decrypt(cipher);
                     var obj = new T();
                     obj.FromByteArray(dados);
                     _index.Insert(obj.GetId(), pos);
@@ -98,28 +92,28 @@ namespace AEDIII.Repositorio
             obj.SetId(novoID);
 
             // Serializa objeto em bytes
-            byte[] dados = obj.ToByteArray();
+            //byte[] dados = obj.ToByteArray();
+            var plain = obj.ToByteArray();
+            var cipher = _crypto.Encrypt(plain);
             long pos;
 
             // Tenta reutilizar espaço disponível
-            long endereco = GetDeleted(dados.Length);
-            if (endereco < 0)
+            var free = GetDeleted(cipher.Length);
+            if (free < 0)
             {
-                // Sem espaço livre: anexa ao final
                 arquivo.Seek(arquivo.Length, SeekOrigin.Begin);
                 pos = arquivo.Position;
                 escritor.Write((byte)' ');
-                escritor.Write((short)dados.Length);
-                escritor.Write(dados);
+                escritor.Write((short)cipher.Length);
+                escritor.Write(cipher);
             }
             else
             {
-                // Reutiliza posição tombstone
-                arquivo.Seek(endereco, SeekOrigin.Begin);
-                pos = endereco;
+                arquivo.Seek(free, SeekOrigin.Begin);
+                pos = free;
                 escritor.Write((byte)' ');
                 arquivo.Seek(2, SeekOrigin.Current);
-                escritor.Write(dados);
+                escritor.Write(cipher);
             }
 
             escritor.Flush();
@@ -136,17 +130,16 @@ namespace AEDIII.Repositorio
         /// <returns>Objeto lido ou default.</returns>
         public T Read(int id)
         {
-            long pos = _index.Search(id);
-            if (pos < 0)
-                return default;
+            var pos = _index.Search(id);
+            if (pos < 0) return default;
 
             arquivo.Seek(pos, SeekOrigin.Begin);
-            byte lapide = leitor.ReadByte();
-            short tamanho = leitor.ReadInt16();
-            byte[] dados = leitor.ReadBytes(tamanho);
-            if (lapide != (byte)' ')
-                return default;
+            var lapide = leitor.ReadByte();
+            var tamanho = leitor.ReadInt16();
+            var cipher = leitor.ReadBytes(tamanho);
+            if (lapide != (byte)' ') return default;
 
+            var dados = _crypto.Decrypt(cipher);
             var obj = new T();
             obj.FromByteArray(dados);
             return obj;
@@ -159,17 +152,13 @@ namespace AEDIII.Repositorio
         /// <returns>True se excluído, false se não encontrado.</returns>
         public bool Delete(int id)
         {
-            long pos = _index.Search(id);
-            if (pos < 0)
-                return false;
+            var pos = _index.Search(id);
+            if (pos < 0) return false;
 
-            // Marca lápide no arquivo de dados
             arquivo.Seek(pos, SeekOrigin.Begin);
             escritor.Write((byte)'*');
-
-            // Lê tamanho para adicionar à lista de deletados
             arquivo.Seek(pos + 1, SeekOrigin.Begin);
-            short tamanho = leitor.ReadInt16();
+            var tamanho = leitor.ReadInt16();
             AddDeleted(tamanho, pos);
 
             escritor.Flush();
@@ -185,53 +174,42 @@ namespace AEDIII.Repositorio
         /// <returns>True se atualizado, false se ID não encontrado.</returns>
         public bool Update(T novoObj)
         {
-            long pos = _index.Search(novoObj.GetId());
-            if (pos < 0)
-                return false;
+            var pos = _index.Search(novoObj.GetId());
+            if (pos < 0) return false;
 
-            arquivo.Seek(pos, SeekOrigin.Begin);
-            byte lapide = leitor.ReadByte();
-            short tamanho = leitor.ReadInt16();
-            byte[] novosDados = novoObj.ToByteArray();
-
-            if (novosDados.Length <= tamanho)
-            {
-                // Sobrescreve no mesmo espaço
-                arquivo.Seek(pos + 3, SeekOrigin.Begin);
-                escritor.Write(novosDados);
-                escritor.Flush();
-                return true;
-            }
-
-            // Tombstone no antigo e adiciona ao freed list
+            // marca tombstone e adiciona ao freelist
             arquivo.Seek(pos, SeekOrigin.Begin);
             escritor.Write((byte)'*');
-            AddDeleted(tamanho, pos);
+            arquivo.Seek(pos + 1, SeekOrigin.Begin);
+            var oldSize = leitor.ReadInt16();
+            AddDeleted(oldSize, pos);
 
-            // Grava novo registro (reutiliza espaço ou no fim)
-            long novoPos;
-            long endereco = GetDeleted(novosDados.Length);
-            if (endereco < 0)
+            // serializa e criptografa o novo
+            var plain = novoObj.ToByteArray();
+            var cipher = _crypto.Encrypt(plain);
+
+            long newPos;
+            var free = GetDeleted(cipher.Length);
+            if (free < 0)
             {
                 arquivo.Seek(arquivo.Length, SeekOrigin.Begin);
-                novoPos = arquivo.Position;
+                newPos = arquivo.Position;
                 escritor.Write((byte)' ');
-                escritor.Write((short)novosDados.Length);
-                escritor.Write(novosDados);
+                escritor.Write((short)cipher.Length);
+                escritor.Write(cipher);
             }
             else
             {
-                arquivo.Seek(endereco, SeekOrigin.Begin);
-                novoPos = endereco;
+                arquivo.Seek(free, SeekOrigin.Begin);
+                newPos = free;
                 escritor.Write((byte)' ');
                 arquivo.Seek(2, SeekOrigin.Current);
-                escritor.Write(novosDados);
+                escritor.Write(cipher);
             }
 
             escritor.Flush();
-            // Atualiza índice: remove e insere no novo offset
             _index.Delete(novoObj.GetId());
-            _index.Insert(novoObj.GetId(), novoPos);
+            _index.Insert(novoObj.GetId(), newPos);
             return true;
         }
 
@@ -243,10 +221,10 @@ namespace AEDIII.Repositorio
         private void AddDeleted(int tamanhoEspaco, long enderecoEspaco)
         {
             arquivo.Seek(4, SeekOrigin.Begin);
-            long endereco = leitor.ReadInt64();
-            if (endereco == -1)
+            var head = leitor.ReadInt64();
+
+            if (head == -1)
             {
-                // Primeira entrada na freelist
                 arquivo.Seek(4, SeekOrigin.Begin);
                 escritor.Write(enderecoEspaco);
                 arquivo.Seek(enderecoEspaco + 3, SeekOrigin.Begin);
@@ -254,23 +232,24 @@ namespace AEDIII.Repositorio
             }
             else
             {
-                // Insere no início ou local adequado
-                while (endereco != -1)
+                long prev = head;
+                while (prev != -1)
                 {
-                    arquivo.Seek(endereco + 1, SeekOrigin.Begin);
-                    int tamanho = leitor.ReadInt16();
-                    long proximo = leitor.ReadInt64();
-                    if (tamanho > tamanhoEspaco)
+                    arquivo.Seek(prev + 1, SeekOrigin.Begin);
+                    var size = leitor.ReadInt16();
+                    var next = leitor.ReadInt64();
+                    if (size > tamanhoEspaco)
                     {
                         arquivo.Seek(4, SeekOrigin.Begin);
                         escritor.Write(enderecoEspaco);
                         arquivo.Seek(enderecoEspaco + 3, SeekOrigin.Begin);
-                        escritor.Write(endereco);
+                        escritor.Write(prev);
                         break;
                     }
-                    endereco = proximo;
+                    prev = next;
                 }
             }
+
             escritor.Flush();
         }
 
@@ -282,46 +261,48 @@ namespace AEDIII.Repositorio
         private long GetDeleted(int tamanhoNecessario)
         {
             arquivo.Seek(4, SeekOrigin.Begin);
-            long endereco = leitor.ReadInt64();
-            while (endereco != -1)
+            var head = leitor.ReadInt64();
+            var prev = head;
+
+            while (prev != -1)
             {
-                arquivo.Seek(endereco + 1, SeekOrigin.Begin);
-                int tamanho = leitor.ReadInt16();
-                long proximo = leitor.ReadInt64();
-                if (tamanho > tamanhoNecessario)
+                arquivo.Seek(prev + 1, SeekOrigin.Begin);
+                var size = leitor.ReadInt16();
+                var next = leitor.ReadInt64();
+                if (size > tamanhoNecessario)
                 {
-                    // Remove da freelist e retorna offset
                     arquivo.Seek(4, SeekOrigin.Begin);
-                    escritor.Write(proximo);
-                    return endereco;
+                    escritor.Write(next);
+                    return prev;
                 }
-                endereco = proximo;
+                prev = next;
             }
+
             return -1;
         }
 
         public IEnumerable<T> ReadAll()
         {
             var lista = new List<T>();
-            // posiciona após o cabeçalho
             arquivo.Seek(TAM_CABECALHO, SeekOrigin.Begin);
+
             while (arquivo.Position < arquivo.Length)
             {
-                long pos = arquivo.Position;
-                byte lapide = leitor.ReadByte();
-                short tamanho = leitor.ReadInt16();
-                byte[] dados = leitor.ReadBytes(tamanho);
+                var lap = leitor.ReadByte();
+                var tam = leitor.ReadInt16();
+                var cipher = leitor.ReadBytes(tam);
 
-                if (lapide == (byte)' ')
+                if (lap == (byte)' ')
                 {
+                    var dados = _crypto.Decrypt(cipher);
                     var obj = new T();
                     obj.FromByteArray(dados);
                     lista.Add(obj);
                 }
             }
+
             return lista;
         }
-
         /// <summary>
         /// Fecha streams de dados e índice, liberando recursos.
         /// </summary>

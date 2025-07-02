@@ -3,14 +3,16 @@ using AEDIII.Entidades;
 using AEDIII.Interfaces;
 using AEDIII.PatternMatching;
 using AEDIII.Repositorio;
+using AEDIII.Security;
 using AEDIII.Service;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-builder.Services.AddSingleton<Arquivo<Pais>>(sp => new Arquivo<Pais>("Pais"));
 builder.Services.AddScoped<IPaisService, PaisService>();
+builder.Services.AddSingleton<AesCryptoService>();
+builder.Services.AddSingleton<XorCryptoService>();
 
 builder.Services.AddControllers();
 // Learn more about configuring Swagger/OpenAPI at https://aka.ms/aspnetcore/swashbuckle
@@ -21,6 +23,20 @@ builder.Services.AddSingleton<HuffmanCompressor>();
 builder.Services.AddSingleton<LzwCompressor>();
 builder.Services.AddSingleton<CompactacaoService>();
 builder.Services.AddSingleton<IPatternMatcher, KmpMatcher>();
+
+builder.Services.AddSingleton<ICryptoService>(sp =>
+    new CompositeCryptoService(
+        sp.GetRequiredService<AesCryptoService>(),
+        sp.GetRequiredService<XorCryptoService>()
+    )
+);
+
+builder.Services.AddSingleton<Arquivo<Pais>>(sp =>
+    new Arquivo<Pais>(
+        "Pais",
+        sp.GetRequiredService<ICryptoService>()
+    )
+);
 
 var app = builder.Build();
 
